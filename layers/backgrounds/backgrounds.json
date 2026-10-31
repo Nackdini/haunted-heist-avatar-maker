@@ -1,4 +1,5 @@
 {
+	"baked": 1793490442,
 	"rooms": [
 		{
 			"file": "backgrounds/room_saferoom.jpg",
@@ -111,25 +112,24 @@
 			"label": "Blue Room"
 		},
 		{
+			"file": "backgrounds/room_passage_entrance.jpg",
+			"id": "room_passage_entrance",
+			"label": "Passage"
+		},
+		{
+			"file": "backgrounds/room_passage_exits.jpg",
+			"id": "room_passage_exits",
+			"label": "Passage Exits"
+		},
+		{
 			"file": "backgrounds/room_lounge.jpg",
 			"id": "room_lounge",
 			"label": "Passage Lounge"
 		},
 		{
-			"file": "backgrounds/room_hallway.jpg",
-			"id": "room_hallway",
-			"label": "Passage"
-		},
-		{
 			"file": "backgrounds/room_loot.jpg",
 			"id": "room_loot",
 			"label": "Vault"
-		},
-		{
-			"file": "backgrounds/room_trap_room_redux.jpg",
-			"id": "room_trap_room_redux",
-			"label": "Passage Trap Room"
 		}
-	],
-	"baked": 1793488890
+	]
 }

@@ -1,4 +1,5 @@
 {
+	"baked": 1793490440,
 	"layer_order": [
 		"skin",
 		"clothes",
@@ -629,7 +630,7 @@
 								"big": {
 									"hat": {
 										"file": "heister/hat_14/style_0_big.png",
-										"h": 456,
+										"h": 454,
 										"w": 950,
 										"x": 37,
 										"y": 0
@@ -784,8 +785,8 @@
 								"big": {
 									"hat": {
 										"file": "heister/hat_19/style_0_big.png",
-										"h": 776,
-										"w": 653,
+										"h": 777,
+										"w": 651,
 										"x": 261,
 										"y": 35
 									}
@@ -794,7 +795,7 @@
 									"hat": {
 										"file": "heister/hat_19/style_0_normal.png",
 										"h": 639,
-										"w": 490,
+										"w": 492,
 										"x": 318,
 										"y": 115
 									}
@@ -11380,7 +11381,7 @@
 								"normal": {
 									"hat": {
 										"file": "trickster/hat_6/style_0_normal.png",
-										"h": 44,
+										"h": 45,
 										"w": 78,
 										"x": 471,
 										"y": 475
@@ -11395,8 +11396,8 @@
 									"hat_skin_base": {
 										"file": "trickster/hat_6/style_0_normal_skin_base.png",
 										"h": 389,
-										"w": 100,
-										"x": 460,
+										"w": 98,
+										"x": 461,
 										"y": 64
 									}
 								}
@@ -11505,8 +11506,8 @@
 									"hat": {
 										"file": "trickster/hat_15/style_0_normal.png",
 										"h": 713,
-										"w": 475,
-										"x": 277,
+										"w": 473,
+										"x": 278,
 										"y": 311
 									}
 								}
@@ -12803,8 +12804,8 @@
 							"skin": {
 								"file": "trickster/outfit_11/s0_w0_skin.png",
 								"h": 689,
-								"w": 593,
-								"x": 230,
+								"w": 589,
+								"x": 234,
 								"y": 335
 							},
 							"skin_base": {
@@ -13838,17 +13839,30 @@
 					"shape_steps": [
 						0.0
 					],
-					"static_color": true,
+					"static_color": false,
 					"variants": {
 						"s0_w0": {
 							"clothes": {
 								"file": "trickster/outfit_12/s0_w0_clothes.png",
+								"h": 418,
+								"w": 199,
+								"x": 450,
+								"y": 474
+							},
+							"skin": {
+								"file": "trickster/outfit_12/s0_w0_skin.png",
 								"h": 690,
 								"w": 595,
 								"x": 231,
 								"y": 334
 							},
-							"skin": null
+							"skin_base": {
+								"file": "trickster/outfit_12/s0_w0_skin_base.png",
+								"h": 690,
+								"w": 595,
+								"x": 231,
+								"y": 334
+							}
 						}
 					},
 					"weight_steps": [
@@ -13973,6 +13987,5 @@
 			]
 		}
 	},
-	"size": 1024,
-	"baked": 1793488890
+	"size": 1024
 }

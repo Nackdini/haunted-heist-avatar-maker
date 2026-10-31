@@ -571,6 +571,8 @@
       color: pick(r.colors).id,
       shape: pick(o.shape_steps),
       weight: pick(o.weight_steps),
+      // Mostly rooms; the flat colors still turn up. "None" (transparent) is never rolled.
+      bg: rooms.length && Math.random() < 0.8 ? pick(rooms).id : pick(BACKGROUNDS.filter((b) => b.id !== "none")).id,
     });
     renderUI();
     render();
