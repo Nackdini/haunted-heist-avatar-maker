@@ -1,0 +1,135 @@
+{
+	"rooms": [
+		{
+			"file": "backgrounds/room_saferoom.jpg",
+			"id": "room_saferoom",
+			"label": "Safe Room"
+		},
+		{
+			"file": "backgrounds/room_atrium.jpg",
+			"id": "room_atrium",
+			"label": "Atrium"
+		},
+		{
+			"file": "backgrounds/room_bathouse.jpg",
+			"id": "room_bathouse",
+			"label": "Bathhouse"
+		},
+		{
+			"file": "backgrounds/room_bathroom.jpg",
+			"id": "room_bathroom",
+			"label": "Bathroom"
+		},
+		{
+			"file": "backgrounds/room_floor2floor.jpg",
+			"id": "room_floor2floor",
+			"label": "Grand Stairs"
+		},
+		{
+			"file": "backgrounds/room_greenhouse.jpg",
+			"id": "room_greenhouse",
+			"label": "Greenhouse"
+		},
+		{
+			"file": "backgrounds/room_hallway.jpg",
+			"id": "room_hallway",
+			"label": "Hallway"
+		},
+		{
+			"file": "backgrounds/room_kitchen.jpg",
+			"id": "room_kitchen",
+			"label": "Kitchen"
+		},
+		{
+			"file": "backgrounds/room_library.jpg",
+			"id": "room_library",
+			"label": "Library"
+		},
+		{
+			"file": "backgrounds/room_loftbar.jpg",
+			"id": "room_loftbar",
+			"label": "Loft Bar"
+		},
+		{
+			"file": "backgrounds/room_messhall.jpg",
+			"id": "room_messhall",
+			"label": "Mess Hall"
+		},
+		{
+			"file": "backgrounds/room_outside.jpg",
+			"id": "room_outside",
+			"label": "Outside"
+		},
+		{
+			"file": "backgrounds/room_pit.jpg",
+			"id": "room_pit",
+			"label": "Pit"
+		},
+		{
+			"file": "backgrounds/room_stairs.jpg",
+			"id": "room_stairs",
+			"label": "Stairs"
+		},
+		{
+			"file": "backgrounds/room_storage.jpg",
+			"id": "room_storage",
+			"label": "Storage"
+		},
+		{
+			"file": "backgrounds/room_trap.jpg",
+			"id": "room_trap",
+			"label": "Trap"
+		},
+		{
+			"file": "backgrounds/room_meme.jpg",
+			"id": "room_meme",
+			"label": "Meme Room"
+		},
+		{
+			"file": "backgrounds/room_thecorridor.jpg",
+			"id": "room_thecorridor",
+			"label": "Corridor"
+		},
+		{
+			"file": "backgrounds/room_trampoline.jpg",
+			"id": "room_trampoline",
+			"label": "Trampoline Room"
+		},
+		{
+			"file": "backgrounds/room_redpassageentranceroom.jpg",
+			"id": "room_redpassageentranceroom",
+			"label": "Red Room"
+		},
+		{
+			"file": "backgrounds/room_greenpassageentranceroom.jpg",
+			"id": "room_greenpassageentranceroom",
+			"label": "Green Room"
+		},
+		{
+			"file": "backgrounds/room_bluepassageentranceroom.jpg",
+			"id": "room_bluepassageentranceroom",
+			"label": "Blue Room"
+		},
+		{
+			"file": "backgrounds/room_lounge.jpg",
+			"id": "room_lounge",
+			"label": "Passage Lounge"
+		},
+		{
+			"file": "backgrounds/room_hallway.jpg",
+			"id": "room_hallway",
+			"label": "Passage"
+		},
+		{
+			"file": "backgrounds/room_loot.jpg",
+			"id": "room_loot",
+			"label": "Vault"
+		},
+		{
+			"file": "backgrounds/room_trap_room_redux.jpg",
+			"id": "room_trap_room_redux",
+			"label": "Passage Trap Room"
+		}
+	],
+	"baked": 1793488890
+}

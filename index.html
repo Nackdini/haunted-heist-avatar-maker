@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haunted Heist Avatar Maker</title>
+<!--
+  Profile picture maker built on the character creator. Every picture is a stack of
+  layers baked in-engine by BenchTools/pfp_layer_bake.tscn into layers/ (see manifest.json):
+  skin (tinted by body color) < clothes < face < hat skin (tinted) < hat.
+  Serve this folder over http (fetch() can't read file://), e.g. `python -m http.server`.
+-->
+<style>
+  /* Game UI palette (UI Theme/*.tres): red pill buttons with 2px black borders,
+     cream button text with a black outline, near-black translucent panels.
+     Font: the game's Dazzle Unicase (copied into fonts/). */
+  @font-face {
+    font-family: "Dazzle Unicase";
+    src: url("fonts/DazzleUnicase-Bold.otf") format("opentype");
+    font-weight: 700;
+    font-display: swap;
+  }
+  :root {
+    --bg: #0b0909;
+    --panel: rgba(25, 25, 25, 0.83);
+    --tile: #1c1818;
+    --tile-hover: #2a2020;
+    --edge: #000;
+    --red: #781e14;
+    --red-hover: #9c2c1f;
+    --red-active: #b5331f;
+    --cream: #f5e2ce;
+    --text: #ffffff;
+    --muted: #a8968a;
+    --radius: 18px;
+    --tile-size: 84px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(1100px 700px at 30% -10%, #3a110c 0%, var(--bg) 62%) fixed, var(--bg);
+    color: var(--text);
+    font-family: "Dazzle Unicase", system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    min-height: 100vh;
+  }
+  button { font: inherit; color: inherit; }
+  /* Cream fill with a black outline, like the in-game buttons and titles. */
+  .outlined, .btn, .roles button[aria-pressed="true"], .tabs button[aria-selected="true"], .section-title {
+    color: var(--cream);
+    paint-order: stroke fill;
+    -webkit-text-stroke: 4px #000;
+  }
+  header {
+    max-width: 1180px; margin: 0 auto; padding: 28px 16px 8px;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  h1 { margin: 0; font-size: clamp(28px, 5vw, 46px); letter-spacing: 0.03em; font-weight: 700; -webkit-text-stroke-width: 6px; }
+  h1 span { color: var(--red-active); }
+
+  main {
+    max-width: 1180px; margin: 0 auto; padding: 12px 16px 48px;
+    display: grid; grid-template-columns: minmax(280px, 520px) minmax(0, 1fr); gap: 24px; align-items: start;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Preview */
+  .preview { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; }
+  @media (max-width: 860px) { .preview { position: static; } }
+  .stage {
+    position: relative; aspect-ratio: 1; width: 100%;
+    border-radius: var(--radius); overflow: hidden; border: 3px solid var(--edge);
+    background-color: #1d1717;
+    background-image: linear-gradient(45deg, #261e1e 25%, transparent 25%), linear-gradient(-45deg, #261e1e 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #261e1e 75%), linear-gradient(-45deg, transparent 75%, #261e1e 75%);
+    background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    transition: border-radius 0.25s ease;
+  }
+  .stage.circle { border-radius: 50%; }
+  .stage canvas { width: 100%; height: 100%; display: block; }
+  .stage .loading {
+    position: absolute; inset: auto 12px 12px auto; padding: 4px 12px; border-radius: 99px;
+    background: rgba(0,0,0,0.7); font-size: 14px; color: var(--cream); opacity: 0; transition: opacity 0.2s;
+  }
+  .stage .loading.on { opacity: 1; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* Pill buttons: button_normal / button_hover / good_guy_button_focus. */
+  .btn {
+    border: 2px solid var(--edge); background: var(--red); border-radius: 100px;
+    padding: 10px 18px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 20px; letter-spacing: 0.03em; white-space: nowrap;
+    transition: background 0.12s, transform 0.05s;
+  }
+  .btn:hover { background: var(--red-hover); }
+  .btn:focus-visible { background: var(--red-active); outline: 2px solid var(--cream); outline-offset: 2px; }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 20px; height: 20px; stroke: var(--cream); filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+  .btn.small { font-size: 15px; padding: 5px 14px; -webkit-text-stroke-width: 3px; }
+  .options { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--cream); font-size: 15px; }
+  .options label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .options input[type="checkbox"] { accent-color: var(--red-active); width: 16px; height: 16px; }
+  .options select { background: var(--red); color: var(--cream); border: 2px solid var(--edge); border-radius: 100px; padding: 3px 8px; font: inherit; }
+  .toast { color: var(--cream); font-size: 15px; min-height: 1.2em; }
+
+  /* Editor */
+  .editor { background: var(--panel); border: 2px solid var(--edge); border-radius: var(--radius); overflow: hidden; min-width: 0; }
+  .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; border-bottom: 2px solid var(--edge); }
+  .roles button {
+    border: 2px solid var(--edge); background: #241c1c; border-radius: 100px; padding: 10px; cursor: pointer;
+    font-size: 22px; letter-spacing: 0.04em; color: var(--muted);
+  }
+  .roles button:hover { background: var(--red-hover); color: var(--cream); }
+  .roles button[aria-pressed="true"] { background: var(--red-active); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 10px 0; }
+  .tabs button {
+    flex: 0 0 auto; border: 2px solid var(--edge); background: #241c1c; border-radius: 100px;
+    padding: 6px 14px; cursor: pointer; color: var(--muted); font-size: 16px;
+  }
+  .tabs button:hover { color: var(--cream); background: var(--red-hover); }
+  .tabs button[aria-selected="true"] { background: var(--red); -webkit-text-stroke-width: 3px; }
+  .tabs button:disabled { opacity: 0.3; cursor: not-allowed; background: #241c1c; color: var(--muted); }
+  .panel { padding: 14px 12px 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile-size), 1fr)); gap: 8px; }
+  .grid.rooms { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+  .tile {
+    position: relative; aspect-ratio: 1; border-radius: 14px; border: 2px solid var(--edge); background: var(--tile);
+    padding: 6px; cursor: pointer; display: grid; place-items: center; overflow: hidden;
+    transition: background 0.12s, box-shadow 0.12s;
+  }
+  .tile:hover { background: var(--tile-hover); }
+  .tile[aria-pressed="true"] { background: #3a1510; box-shadow: inset 0 0 0 3px var(--red-active); }
+  .tile img, .tile canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; pointer-events: none; }
+  .tile .none { color: var(--muted); font-size: 14px; text-align: center; line-height: 1.1; }
+  .tile.photo { padding: 0; }
+  .tile.photo img { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; }
+  .tile.photo[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--red-active); }
+  .tile .label {
+    position: absolute; inset: auto 0 0 0; font-size: 12px; padding: 3px 4px; background: rgba(0,0,0,0.72);
+    color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+  }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 10px; }
+  .swatch {
+    aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--edge); cursor: pointer;
+    transition: box-shadow 0.12s, transform 0.1s;
+  }
+  .swatch:hover { transform: scale(1.06); }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--red-active); }
+  .section-title { margin: 6px 4px 10px; font-size: 18px; -webkit-text-stroke-width: 3px; }
+  .grid + .section-title, .swatches + .section-title { margin-top: 20px; }
+  .slider { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: center; margin: 10px 4px 18px; }
+  .slider > span { font-size: 18px; color: var(--cream); }
+  .slider input { width: 100%; accent-color: var(--red-active); }
+  .slider .ticks { grid-column: 2; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin-top: -10px; }
+  .error { padding: 24px; color: var(--cream); line-height: 1.5; }
+  .error code { background: #241c1c; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; font-weight: 400; }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="outlined">Haunted Heist <span>Avatar Maker</span></h1>
+</header>
+<main>
+  <section class="preview" aria-label="Preview">
+    <div class="stage" id="stage">
+      <canvas id="canvas" width="1024" height="1024" aria-label="Your avatar"></canvas>
+      <div class="loading" id="loading">Loading…</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="randomize" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg>
+        Randomize
+      </button>
+      <button class="btn primary" id="download" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        Download
+      </button>
+    </div>
+    <div class="options">
+      <label><input type="checkbox" id="circle"> Circle preview</label>
+      <label><input type="checkbox" id="soft" checked> Soft room</label>
+      <label>Size
+        <select id="size">
+          <option value="256">256</option>
+          <option value="512" selected>512</option>
+          <option value="1024">1024</option>
+        </select>
+      </label>
+      <button class="btn small" id="share" type="button">Copy link</button>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+  </section>
+
+  <section class="editor" aria-label="Customize">
+    <div class="roles" id="roles"></div>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="panel" id="panel"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const LAYERS = "layers/";
+  const ROLE_LABELS = { heister: "Heister", trickster: "Trickster" };
+  const TABS = [
+    { id: "outfit", label: "Outfit" },
+    { id: "face", label: "Face" },
+    { id: "hat", label: "Hat" },
+    { id: "color", label: "Color" },
+    { id: "body", label: "Body" },
+    { id: "background", label: "Background" },
+  ];
+  const BACKGROUNDS = [
+    { id: "none", label: "None" },
+    { id: "mansion", label: "Mansion", stops: ["#4a3560", "#16101e"] },
+    { id: "blood", label: "Blood", stops: ["#9c2a22", "#2a0806"] },
+    { id: "moss", label: "Moss", stops: ["#4f6a2a", "#141b0a"] },
+    { id: "ectoplasm", label: "Ectoplasm", stops: ["#3fb7a0", "#0a2a2a"] },
+    { id: "candle", label: "Candle", stops: ["#f0c070", "#6a3510"] },
+    { id: "midnight", label: "Midnight", stops: ["#2c3f7a", "#070b1c"] },
+    { id: "bone", label: "Bone", color: "#e9e0cc" },
+    { id: "pumpkin", label: "Pumpkin", color: "#e0742a" },
+    { id: "ink", label: "Ink", color: "#0d0b10" },
+    { id: "gem", label: "Gem", color: "#c23a8a" },
+    { id: "slime", label: "Slime", color: "#7ad13a" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("canvas");
+  const ctx = canvas.getContext("2d");
+  let manifest = null;
+  let rooms = []; // from layers/backgrounds/backgrounds.json (BenchTools/pfp_room_bake.tscn)
+  let roomsBaked = 0;
+  let role = "heister";
+  let tab = "outfit";
+  const state = {}; // role -> selections
+
+  // ---------- data helpers ----------
+  const prettify = (name, role) => name
+    .replace(new RegExp("^" + role + "_", "i"), "")
+    .replace(/_(outfit|hat|face|static_face)$/i, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const R = () => manifest.roles[role];
+  const S = () => state[role];
+  const outfitOf = (s = S()) => R().outfits.find((o) => o.id === s.outfit) || R().outfits[0];
+  const hatOf = (s = S()) => R().hats.find((h) => h.id === s.hat) || null;
+  const stepKey = (shape, weight) => `s${Math.round(shape * 100)}_w${Math.round(weight * 100)}`;
+  const nearest = (steps, v) => steps.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a, steps[0]);
+
+  function defaults(r) {
+    const roleData = manifest.roles[r];
+    return {
+      outfit: roleData.default_outfit,
+      face: roleData.default_face,
+      hat: roleData.no_hat,
+      style: 0,
+      color: roleData.colors[0].id,
+      shape: 0,
+      weight: 0,
+      bg: rooms.length ? rooms[0].id : "mansion",
+    };
+  }
+
+  function clampToOutfit(s) {
+    const o = outfitOf(s);
+    s.shape = nearest(o.shape_steps, s.shape);
+    s.weight = nearest(o.weight_steps, s.weight);
+    const h = hatOf(s);
+    if (h && s.style >= h.styles.length) s.style = 0;
+  }
+
+  // Layers to draw, bottom to top: [entry, tintHex|null, baseEntry|null]
+  function layerStack(s = S()) {
+    const r = R();
+    const o = outfitOf(s);
+    const v = o.variants[stepKey(s.shape, s.weight)] || Object.values(o.variants)[0];
+    const tint = o.static_color ? null : "#" + (r.colors.find((c) => c.id === s.color) || r.colors[0]).hex;
+    const hat = o.allows_hats && s.hat !== r.no_hat ? hatOf(s) : null;
+    const hatBodies = hat ? (hat.styles[s.style] || hat.styles[0]).bodies : null;
+    const hatLayers = hatBodies ? (hatBodies[o.big_body ? "big" : "normal"] || hatBodies.normal || Object.values(hatBodies)[0]) : null;
+    const faces = v.faces || {};
+    const faceKey = o.face_locked ? String(o.locked_face) : String(s.face);
+    const stack = [];
+    if (v.skin) stack.push([v.skin, tint, v.skin_base]);
+    // With a hat on, hoods/helmets swap out, even when that leaves no clothes at all.
+    const clothes = hat && o.hat_swaps_clothes ? v.clothes_hat : v.clothes;
+    if (clothes) stack.push([clothes, null]);
+    if (faces[faceKey]) stack.push([faces[faceKey], null]);
+    if (hatLayers && hatLayers.hat_skin) stack.push([hatLayers.hat_skin, hat.skin_tinted ? tint : null, hatLayers.hat_skin_base]);
+    if (hatLayers && hatLayers.hat) stack.push([hatLayers.hat, null]);
+    return stack;
+  }
+
+  // ---------- image loading / tinting ----------
+  const images = new Map();
+  function loadImage(file) {
+    if (!images.has(file)) {
+      images.set(file, new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Missing " + file));
+        // Bake stamps bust caches: re-baked layers keep their file names.
+        const baked = file.startsWith("backgrounds/") ? roomsBaked : manifest.baked;
+        img.src = LAYERS + file + (baked ? "?v=" + baked : "");
+      }));
+    }
+    return images.get(file);
+  }
+  const tinted = new Map();
+  const toLinear = new Float32Array(256).map((_, i) => {
+    const c = i / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  const toSrgb = (l) => {
+    const c = l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(c * 255)));
+  };
+  // Skin is baked with white (img) and black (base) body color. The game's toon shader
+  // only tints where its color mask allows, so rebuild the color per pixel in linear
+  // light: base + (white - base) * color. Without a base layer, fall back to multiply.
+  function tint(img, base, hex) {
+    const key = img.src + hex;
+    if (tinted.has(key)) return tinted.get(key);
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    const rgb = [1, 3, 5].map((i) => toLinear[parseInt(hex.slice(i, i + 2), 16)]);
+    if (base) {
+      g.drawImage(base, 0, 0);
+      const b = g.getImageData(0, 0, c.width, c.height).data;
+      g.clearRect(0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0);
+      const out = g.getImageData(0, 0, c.width, c.height);
+      const w = out.data;
+      for (let i = 0; i < w.length; i += 4) {
+        if (w[i + 3] === 0) continue;
+        for (let ch = 0; ch < 3; ch++) {
+          const lb = toLinear[b[i + ch]];
+          w[i + ch] = toSrgb(lb + (toLinear[w[i + ch]] - lb) * rgb[ch]);
+        }
+      }
+      g.putImageData(out, 0, 0);
+    } else {
+      g.drawImage(img, 0, 0);
+      g.globalCompositeOperation = "multiply";
+      g.fillStyle = hex;
+      g.fillRect(0, 0, c.width, c.height);
+      g.globalCompositeOperation = "destination-in";
+      g.drawImage(img, 0, 0);
+    }
+    tinted.set(key, c);
+    return c;
+  }
+
+  const isBg = (id) => BACKGROUNDS.some((b) => b.id === id) || rooms.some((r) => r.id === id);
+
+  function paintBackground(g, size, bgId, roomImg) {
+    g.clearRect(0, 0, size, size);
+    if (roomImg) {
+      // Soft focus keeps the character readable against a busy room.
+      const soft = $("soft").checked;
+      if (soft) g.filter = `blur(${Math.round(size / 220)}px)`;
+      const pad = soft ? size * 0.02 : 0;
+      g.drawImage(roomImg, -pad, -pad, size + pad * 2, size + pad * 2);
+      g.filter = "none";
+      const vignette = g.createRadialGradient(size / 2, size * 0.45, size * 0.25, size / 2, size * 0.5, size * 0.75);
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, soft ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)");
+      g.fillStyle = vignette; g.fillRect(0, 0, size, size);
+      return;
+    }
+    const bg = BACKGROUNDS.find((b) => b.id === bgId) || BACKGROUNDS[0];
+    if (bg.color) { g.fillStyle = bg.color; g.fillRect(0, 0, size, size); }
+    if (bg.stops) {
+      const grad = g.createRadialGradient(size / 2, size * 0.42, size * 0.05, size / 2, size * 0.5, size * 0.75);
+      grad.addColorStop(0, bg.stops[0]);
+      grad.addColorStop(1, bg.stops[1]);
+      g.fillStyle = grad; g.fillRect(0, 0, size, size);
+    }
+  }
+
+  async function composeTo(g, size, s = S()) {
+    const stack = layerStack(s);
+    const room = rooms.find((r) => r.id === s.bg);
+    const [roomImg, ...imgs] = await Promise.all([room ? loadImage(room.file) : null, ...stack.map(([e]) => loadImage(e.file))]);
+    const bases = await Promise.all(stack.map(([, hex, base]) => (hex && base ? loadImage(base.file) : null)));
+    const k = size / manifest.size;
+    paintBackground(g, size, s.bg, roomImg);
+    g.imageSmoothingQuality = "high";
+    stack.forEach(([e, hex], i) => {
+      const src = hex ? tint(imgs[i], bases[i], hex) : imgs[i];
+      g.drawImage(src, e.x * k, e.y * k, e.w * k, e.h * k);
+    });
+  }
+
+  let drawToken = 0;
+  async function render() {
+    const token = ++drawToken;
+    const loading = setTimeout(() => $("loading").classList.add("on"), 150);
+    const off = document.createElement("canvas");
+    off.width = off.height = manifest.size;
+    try {
+      await composeTo(off.getContext("2d"), manifest.size);
+      if (token !== drawToken) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't load part of this look.");
+    } finally {
+      clearTimeout(loading);
+      if (token === drawToken) $("loading").classList.remove("on");
+    }
+    writeHash();
+  }
+
+  // ---------- UI ----------
+  function el(tag, attrs = {}, children = []) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") n.className = v;
+      else if (k === "on") for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
+      else if (v !== undefined && v !== null && v !== false) n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of [].concat(children)) if (c != null) n.append(c);
+    return n;
+  }
+
+  function tile({ pressed, title, onClick, content, label, photo }) {
+    return el("button", { type: "button", class: photo ? "tile photo" : "tile", "aria-pressed": String(!!pressed), title, on: { click: onClick } },
+      [content, label ? el("span", { class: "label" }, label) : null]);
+  }
+
+  function iconImg(path, alt) {
+    return path ? el("img", { src: LAYERS + path, alt, loading: "lazy" }) : el("span", { class: "none" }, alt);
+  }
+
+  // Faces have no icon: crop the face layer onto a small skin-colored chip.
+  function faceThumb(entry) {
+    const c = el("canvas", { width: 96, height: 96 });
+    loadImage(entry.file).then((img) => {
+      const g = c.getContext("2d");
+      const scale = Math.min(88 / img.naturalWidth, 88 / img.naturalHeight);
+      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+      g.fillStyle = "#" + (R().colors.find((x) => x.id === S().color) || R().colors[0]).hex;
+      g.beginPath(); g.arc(48, 48, 46, 0, Math.PI * 2); g.fill();
+      g.drawImage(img, (96 - w) / 2, (96 - h) / 2, w, h);
+    }).catch(() => {});
+    return c;
+  }
+
+  function set(patch) {
+    Object.assign(S(), patch);
+    clampToOutfit(S());
+    renderUI();
+    render();
+  }
+
+  function renderRoles() {
+    const box = $("roles");
+    box.replaceChildren(...Object.keys(manifest.roles).map((r) =>
+      el("button", { type: "button", "aria-pressed": String(r === role), on: { click: () => { role = r; renderUI(); render(); } } }, ROLE_LABELS[r] || r)));
+  }
+
+  function renderTabs() {
+    const o = outfitOf();
+    const disabled = {
+      face: o.face_locked,
+      hat: !o.allows_hats,
+      color: o.static_color,
+      body: o.shape_steps.length < 2 && o.weight_steps.length < 2,
+    };
+    if (disabled[tab]) tab = "outfit";
+    $("tabs").replaceChildren(...TABS.map((t) => el("button", {
+      type: "button", role: "tab", "aria-selected": String(t.id === tab), disabled: !!disabled[t.id],
+      title: disabled[t.id] ? "This outfit doesn't use this" : undefined,
+      on: { click: () => { tab = t.id; renderUI(); } },
+    }, t.label)));
+  }
+
+  function renderPanel() {
+    const r = R(), s = S(), o = outfitOf();
+    const panel = $("panel");
+    const nodes = [];
+    if (tab === "outfit") {
+      nodes.push(el("div", { class: "grid" }, r.outfits.map((x) => tile({
+        pressed: x.id === s.outfit, title: "Outfit",
+        content: iconImg(x.icon, "Outfit"),
+        onClick: () => set({ outfit: x.id }),
+      }))));
+    } else if (tab === "face") {
+      const v = o.variants[stepKey(s.shape, s.weight)];
+      nodes.push(el("div", { class: "grid" }, r.faces.filter((f) => v.faces && v.faces[f.id]).map((f) => tile({
+        pressed: f.id === s.face, title: prettify(f.name, role),
+        content: faceThumb(v.faces[f.id]),
+        onClick: () => set({ face: f.id }),
+      }))));
+    } else if (tab === "hat") {
+      const tiles = [tile({ pressed: s.hat === r.no_hat, title: "No hat", content: el("span", { class: "none" }, "No hat"), onClick: () => set({ hat: r.no_hat, style: 0 }) })];
+      for (const h of r.hats) tiles.push(tile({
+        pressed: h.id === s.hat, title: prettify(h.name, role),
+        content: iconImg(h.icon || (h.styles[0] && h.styles[0].icon), prettify(h.name, role)),
+        onClick: () => set({ hat: h.id, style: 0 }),
+      }));
+      nodes.push(el("div", { class: "grid" }, tiles));
+      const h = hatOf();
+      if (h && h.styles.length > 1 && s.hat !== r.no_hat) {
+        nodes.push(el("div", { class: "section-title" }, "Style"));
+        nodes.push(el("div", { class: "grid" }, h.styles.map((st, i) => tile({
+          pressed: i === s.style, title: `Style ${i + 1}`,
+          content: iconImg(st.icon, `Style ${i + 1}`),
+          onClick: () => set({ style: i }),
+        }))));
+      }
+    } else if (tab === "color") {
+      nodes.push(el("div", { class: "swatches" }, r.colors.map((c) => el("button", {
+        type: "button", class: "swatch", style: `background:#${c.hex}`, title: "#" + c.hex, "aria-label": "Color #" + c.hex,
+        "aria-pressed": String(c.id === s.color), on: { click: () => set({ color: c.id }) },
+      }))));
+    } else if (tab === "body") {
+      const slider = (label, key, steps) => {
+        if (steps.length < 2) return null;
+        const input = el("input", { type: "range", min: 0, max: steps.length - 1, step: 1, value: steps.indexOf(s[key]), "aria-label": label });
+        input.addEventListener("input", () => { S()[key] = steps[+input.value]; render(); });
+        return el("div", { class: "slider" }, [el("span", {}, label), input,
+          el("div", { class: "ticks" }, steps.map((v) => el("span", {}, v === 0 ? "Min" : v === 1 ? "Max" : "Mid")))]);
+      };
+      nodes.push(slider("Shape", "shape", o.shape_steps));
+      nodes.push(slider("Weight", "weight", o.weight_steps));
+    } else if (tab === "background") {
+      if (rooms.length) {
+        nodes.push(el("div", { class: "section-title" }, "Rooms"));
+        nodes.push(el("div", { class: "grid rooms" }, rooms.map((rm) => tile({
+          pressed: rm.id === s.bg, photo: true,
+          content: el("img", { src: LAYERS + rm.file + (roomsBaked ? "?v=" + roomsBaked : ""), alt: "Room", loading: "lazy" }),
+          onClick: () => set({ bg: rm.id }),
+        }))));
+        nodes.push(el("div", { class: "section-title" }, "Colors"));
+      }
+      nodes.push(el("div", { class: "swatches" }, BACKGROUNDS.map((b) => {
+        let style = "background:" + (b.color || (b.stops ? `radial-gradient(circle at 50% 40%, ${b.stops[0]}, ${b.stops[1]})` : "repeating-conic-gradient(#3a3145 0 25%, #262030 0 50%) 50% / 14px 14px"));
+        return el("button", { type: "button", class: "swatch", style, title: b.label, "aria-label": b.label + " background",
+          "aria-pressed": String(b.id === s.bg), on: { click: () => set({ bg: b.id }) } });
+      })));
+    }
+    panel.replaceChildren(...nodes.filter(Boolean));
+  }
+
+  function renderUI() {
+    renderRoles();
+    renderTabs();
+    renderPanel();
+  }
+
+  // ---------- actions ----------
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  function randomize() {
+    const r = R();
+    const o = pick(r.outfits);
+    const hatRoll = Math.random() < 0.25 ? r.no_hat : pick(r.hats).id;
+    const h = r.hats.find((x) => x.id === hatRoll);
+    Object.assign(S(), {
+      outfit: o.id,
+      face: pick(r.faces).id,
+      hat: hatRoll,
+      style: h ? Math.floor(Math.random() * h.styles.length) : 0,
+      color: pick(r.colors).id,
+      shape: pick(o.shape_steps),
+      weight: pick(o.weight_steps),
+    });
+    renderUI();
+    render();
+  }
+
+  async function download() {
+    const size = +$("size").value;
+    const c = document.createElement("canvas");
+    c.width = c.height = manifest.size;
+    await composeTo(c.getContext("2d"), manifest.size);
+    let out = c;
+    if (size !== manifest.size) {
+      out = document.createElement("canvas");
+      out.width = out.height = size;
+      const g = out.getContext("2d");
+      g.imageSmoothingQuality = "high";
+      g.drawImage(c, 0, 0, size, size);
+    }
+    out.toBlob((blob) => {
+      const a = el("a", { href: URL.createObjectURL(blob), download: `haunted-heist-${role}-${size}.png` });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, "image/png");
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    $("toast").textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $("toast").textContent = ""; }, 2500);
+  }
+
+  // #r=heister&o=0&f=3&h=4&st=0&c=2&sh=50&w=0&bg=mansion
+  function writeHash() {
+    const s = S();
+    const p = new URLSearchParams({ r: role, o: s.outfit, f: s.face, h: s.hat, st: s.style, c: s.color, sh: Math.round(s.shape * 100), w: Math.round(s.weight * 100), bg: s.bg });
+    history.replaceState(null, "", "#" + p.toString());
+  }
+  function readHash() {
+    const p = new URLSearchParams(location.hash.slice(1));
+    if (!p.has("r") || !manifest.roles[p.get("r")]) return;
+    role = p.get("r");
+    const n = (k, d) => (p.has(k) && !isNaN(+p.get(k)) ? +p.get(k) : d);
+    const s = S();
+    Object.assign(s, {
+      outfit: n("o", s.outfit), face: n("f", s.face), hat: n("h", s.hat), style: n("st", 0), color: n("c", s.color),
+      shape: n("sh", 0) / 100, weight: n("w", 0) / 100, bg: isBg(p.get("bg")) ? p.get("bg") : s.bg,
+    });
+    if (!R().outfits.some((o) => o.id === s.outfit)) s.outfit = R().default_outfit;
+    clampToOutfit(s);
+  }
+
+  async function init() {
+    try {
+      const res = await fetch(LAYERS + "manifest.json", { cache: "no-cache" });
+      if (!res.ok) throw new Error(res.status);
+      manifest = await res.json();
+    } catch (err) {
+      $("panel").replaceChildren(el("div", { class: "error" }, [
+        "Couldn't load ", el("code", {}, "layers/manifest.json"), ". Bake the layers with ",
+        el("code", {}, "BenchTools/pfp_layer_bake.tscn"), " and serve this folder over http (",
+        el("code", {}, "python -m http.server"), ").",
+      ]));
+      return;
+    }
+    try {
+      const res = await fetch(LAYERS + "backgrounds/backgrounds.json", { cache: "no-cache" });
+      if (res.ok) {
+        const data = await res.json();
+        rooms = data.rooms || [];
+        roomsBaked = data.baked || 0;
+      }
+    } catch { /* room shots are optional */ }
+    for (const r of Object.keys(manifest.roles)) state[r] = defaults(r);
+    readHash();
+    $("randomize").addEventListener("click", randomize);
+    $("download").addEventListener("click", download);
+    $("circle").addEventListener("change", (e) => $("stage").classList.toggle("circle", e.target.checked));
+    $("soft").addEventListener("change", render);
+    $("share").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(location.href); toast("Link copied"); }
+      catch { toast("Copy the address bar to share"); }
+    });
+    renderUI();
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
