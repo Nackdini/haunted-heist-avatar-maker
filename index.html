@@ -278,7 +278,10 @@
     const r = R();
     const o = outfitOf(s);
     const v = o.variants[stepKey(s.shape, s.weight)] || Object.values(o.variants)[0];
-    const tint = o.static_color ? null : "#" + (r.colors.find((c) => c.id === s.color) || r.colors[0]).hex;
+    // Like PlayerAnimation.apply_character_color: a static-color outfit keeps its body,
+    // but skin-colored head accessories still take the body color.
+    const color = "#" + (r.colors.find((c) => c.id === s.color) || r.colors[0]).hex;
+    const tint = o.static_color ? null : color;
     const hat = o.allows_hats && s.hat !== r.no_hat ? hatOf(s) : null;
     const hatBodies = hat ? (hat.styles[s.style] || hat.styles[0]).bodies : null;
     const hatLayers = hatBodies ? (hatBodies[o.big_body ? "big" : "normal"] || hatBodies.normal || Object.values(hatBodies)[0]) : null;
@@ -290,7 +293,7 @@
     const clothes = hat && o.hat_swaps_clothes ? v.clothes_hat : v.clothes;
     if (clothes) stack.push([clothes, null]);
     if (faces[faceKey]) stack.push([faces[faceKey], null]);
-    if (hatLayers && hatLayers.hat_skin) stack.push([hatLayers.hat_skin, hat.skin_tinted ? tint : null, hatLayers.hat_skin_base]);
+    if (hatLayers && hatLayers.hat_skin) stack.push([hatLayers.hat_skin, hat.skin_tinted ? color : null, hatLayers.hat_skin_base]);
     if (hatLayers && hatLayers.hat) stack.push([hatLayers.hat, null]);
     return stack;
   }
@@ -468,10 +471,12 @@
 
   function renderTabs() {
     const o = outfitOf();
+    const hat = o.allows_hats && S().hat !== R().no_hat ? hatOf() : null;
     const disabled = {
       face: o.face_locked,
       hat: !o.allows_hats,
-      color: o.static_color,
+      // Static-color outfits only recolor skin-colored head accessories.
+      color: o.static_color && !(hat && hat.skin_tinted),
       body: o.shape_steps.length < 2 && o.weight_steps.length < 2,
     };
     if (disabled[tab]) tab = "outfit";

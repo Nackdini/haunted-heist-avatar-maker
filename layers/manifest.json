@@ -1,5 +1,5 @@
 {
-	"baked": 1793490440,
+	"baked": 1793490759,
 	"layer_order": [
 		"skin",
 		"clothes",
@@ -630,7 +630,7 @@
 								"big": {
 									"hat": {
 										"file": "heister/hat_14/style_0_big.png",
-										"h": 454,
+										"h": 453,
 										"w": 950,
 										"x": 37,
 										"y": 0
@@ -639,7 +639,7 @@
 								"normal": {
 									"hat": {
 										"file": "heister/hat_14/style_0_normal.png",
-										"h": 461,
+										"h": 464,
 										"w": 730,
 										"x": 147,
 										"y": 0
@@ -785,8 +785,8 @@
 								"big": {
 									"hat": {
 										"file": "heister/hat_19/style_0_big.png",
-										"h": 777,
-										"w": 651,
+										"h": 776,
+										"w": 653,
 										"x": 261,
 										"y": 35
 									}
@@ -794,8 +794,8 @@
 								"normal": {
 									"hat": {
 										"file": "heister/hat_19/style_0_normal.png",
-										"h": 639,
-										"w": 492,
+										"h": 638,
+										"w": 491,
 										"x": 318,
 										"y": 115
 									}
@@ -8499,7 +8499,7 @@
 						},
 						"s100_w50": {
 							"clothes": {
-								"file": "heister/outfit_9/s100_w50_clothes.png",
+								"file": "heister/outfit_9/s50_w50_clothes.png",
 								"h": 818,
 								"w": 502,
 								"x": 251,
@@ -11381,7 +11381,7 @@
 								"normal": {
 									"hat": {
 										"file": "trickster/hat_6/style_0_normal.png",
-										"h": 45,
+										"h": 44,
 										"w": 78,
 										"x": 471,
 										"y": 475
@@ -11396,8 +11396,8 @@
 									"hat_skin_base": {
 										"file": "trickster/hat_6/style_0_normal_skin_base.png",
 										"h": 389,
-										"w": 98,
-										"x": 461,
+										"w": 100,
+										"x": 460,
 										"y": 64
 									}
 								}
@@ -11506,7 +11506,7 @@
 									"hat": {
 										"file": "trickster/hat_15/style_0_normal.png",
 										"h": 713,
-										"w": 473,
+										"w": 474,
 										"x": 278,
 										"y": 311
 									}
@@ -12804,8 +12804,8 @@
 							"skin": {
 								"file": "trickster/outfit_11/s0_w0_skin.png",
 								"h": 689,
-								"w": 589,
-								"x": 234,
+								"w": 595,
+								"x": 228,
 								"y": 335
 							},
 							"skin_base": {
@@ -12907,8 +12907,8 @@
 							"skin": {
 								"file": "trickster/outfit_11/s100_w0_skin.png",
 								"h": 689,
-								"w": 614,
-								"x": 209,
+								"w": 616,
+								"x": 207,
 								"y": 335
 							},
 							"skin_base": {
@@ -13010,8 +13010,8 @@
 							"skin": {
 								"file": "trickster/outfit_11/s50_w0_skin.png",
 								"h": 689,
-								"w": 616,
-								"x": 207,
+								"w": 612,
+								"x": 211,
 								"y": 335
 							},
 							"skin_base": {
@@ -13839,30 +13839,17 @@
 					"shape_steps": [
 						0.0
 					],
-					"static_color": false,
+					"static_color": true,
 					"variants": {
 						"s0_w0": {
 							"clothes": {
 								"file": "trickster/outfit_12/s0_w0_clothes.png",
-								"h": 418,
-								"w": 199,
-								"x": 450,
-								"y": 474
-							},
-							"skin": {
-								"file": "trickster/outfit_12/s0_w0_skin.png",
 								"h": 690,
 								"w": 595,
 								"x": 231,
 								"y": 334
 							},
-							"skin_base": {
-								"file": "trickster/outfit_12/s0_w0_skin_base.png",
-								"h": 690,
-								"w": 595,
-								"x": 231,
-								"y": 334
-							}
+							"skin": null
 						}
 					},
 					"weight_steps": [
