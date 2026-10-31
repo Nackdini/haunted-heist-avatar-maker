@@ -45,7 +45,9 @@
     text-transform: uppercase;
     min-height: 100vh;
   }
-  button { font: inherit; color: inherit; }
+  /* Dazzle Unicase draws lowercase e round, so every label must really be uppercase.
+     Browsers give form controls text-transform: none; make them follow body. */
+  button, select, input { font: inherit; color: inherit; text-transform: inherit; }
   /* Cream fill with a black outline, like the in-game buttons and titles. */
   .outlined, .btn, .roles button[aria-pressed="true"], .tabs button[aria-selected="true"], .section-title {
     color: var(--cream);
