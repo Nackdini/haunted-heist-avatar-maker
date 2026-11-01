@@ -98,7 +98,7 @@
   .btn:hover { background: var(--red-hover); }
   .btn:focus-visible { background: var(--red-active); outline: 2px solid var(--cream); outline-offset: 2px; }
   .btn:active { transform: translateY(1px); }
-  .btn svg { width: 20px; height: 20px; stroke: var(--cream); filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+  .btn svg { flex-shrink: 0; width: 20px; height: 20px; stroke: var(--cream); filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
   .btn.small { font-size: 15px; padding: 5px 14px; -webkit-text-stroke-width: 3px; }
   .options { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: var(--cream); font-size: 15px; }
   .options label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -157,6 +157,71 @@
   .slider .ticks { grid-column: 2; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin-top: -10px; }
   .error { padding: 24px; color: var(--cream); line-height: 1.5; }
   .error code { background: #241c1c; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; font-weight: 400; }
+  /* ---------- Phones ---------- */
+  button, select, label, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .short { display: none; }
+  @media (max-width: 860px) {
+    :root { --tile-size: 68px; }
+    header { padding: 14px 12px 4px; }
+    h1 { font-size: clamp(20px, 6.2vw, 30px); -webkit-text-stroke-width: 5px; }
+    main { padding: 4px 12px calc(32px + env(safe-area-inset-bottom)); gap: 12px; }
+    .actions > * { min-width: 0; }
+    .btn { font-size: 17px; padding: 10px 12px; min-height: 46px; }
+    .btn.small { font-size: 14px; min-height: 34px; padding: 4px 12px; }
+    .options { font-size: 13px; gap: 6px 10px; justify-content: center; flex-wrap: nowrap; }
+    .options label { gap: 4px; }
+    .options select { padding: 2px 4px; }
+    .options input[type="checkbox"] { width: 18px; height: 18px; }
+    .options select { min-height: 32px; }
+    .long { display: none; }
+    .short { display: inline; }
+    .roles { padding: 8px; gap: 6px; }
+    .roles button { font-size: 18px; padding: 8px; min-height: 44px; }
+    /* One swipeable row of tabs instead of three wrapped lines. */
+    .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 8px 2px; scroll-snap-type: x proximity; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs button { min-height: 40px; padding: 6px 14px; font-size: 15px; flex-shrink: 0; scroll-snap-align: start; }
+    .panel { padding: 12px 8px 14px; }
+    .grid { gap: 6px; }
+    .grid.rooms { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+    .swatches { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 10px; }
+    .slider { grid-template-columns: 76px 1fr; }
+    .slider input { height: 32px; }
+  }
+  /* Landscape phones: picture + buttons pinned on the left, options on the right. */
+  @media (max-height: 559px) and (min-width: 560px) {
+    header { padding: 8px 12px 2px; }
+    h1 { font-size: 22px; }
+    main { grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding-top: 4px; }
+    .preview { position: sticky; top: 8px; width: calc(100svh - 160px); min-width: 210px; gap: 6px; }
+    .actions { gap: 6px; }
+    .btn { font-size: 14px; padding: 6px 4px; min-height: 36px; }
+    .btn svg { display: none; }
+    .options { flex-wrap: wrap; font-size: 12px; gap: 4px 8px; }
+    .toast:empty { display: none; }
+  }
+  @media (max-width: 360px) {
+    .size-word, .btn svg { display: none; }
+    .options { gap: 6px 8px; font-size: 12px; }
+  }
+  /* Tall phones: keep the picture pinned while the options scroll underneath. */
+  @media (max-width: 860px) and (min-height: 560px) {
+    .preview {
+      position: sticky; top: 0; z-index: 5;
+      margin: 0 -12px; padding: 8px 12px 10px;
+      background: var(--bg);
+      box-shadow: 0 10px 18px -8px rgba(0, 0, 0, 0.85);
+      gap: 8px;
+    }
+    .stage { width: min(100%, 34svh); margin: 0 auto; border-radius: 14px; }
+    .stage.circle { border-radius: 50%; }
+    .actions { width: min(100%, 420px); margin: 0 auto; }
+    .toast:empty { display: none; }
+    /* Tabs pin right under the preview (--pin-h is measured in script).
+       overflow: clip, unlike hidden, doesn't make the editor a scroll container. */
+    .editor { overflow: clip; }
+    .tabs { position: sticky; top: var(--pin-h, 0px); z-index: 4; background: #191515; padding-bottom: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -180,16 +245,16 @@
       </button>
     </div>
     <div class="options">
-      <label><input type="checkbox" id="circle"> Circle preview</label>
-      <label><input type="checkbox" id="soft" checked> Soft room</label>
-      <label>Size
-        <select id="size">
+      <label><input type="checkbox" id="circle"> Circle<span class="long"> preview</span></label>
+      <label><input type="checkbox" id="soft" checked> Soft<span class="long"> room</span></label>
+      <label><span class="size-word">Size</span>
+        <select id="size" aria-label="Download size">
           <option value="256">256</option>
           <option value="512" selected>512</option>
           <option value="1024">1024</option>
         </select>
       </label>
-      <button class="btn small" id="share" type="button">Copy link</button>
+      <button class="btn small" id="share" type="button"><span class="long">Copy </span>Link</button>
     </div>
     <div class="toast" id="toast" role="status"></div>
   </section>
@@ -596,11 +661,21 @@
       g.imageSmoothingQuality = "high";
       g.drawImage(c, 0, 0, size, size);
     }
-    out.toBlob((blob) => {
-      const a = el("a", { href: URL.createObjectURL(blob), download: `haunted-heist-${role}-${size}.png` });
-      document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    }, "image/png");
+    const name = `haunted-heist-${role}-${size}.png`;
+    const blob = await new Promise((resolve) => out.toBlob(resolve, "image/png"));
+    // Phones: the share sheet offers "Save Image" straight to Photos.
+    const file = new File([blob], name, { type: "image/png" });
+    if (matchMedia("(pointer: coarse)").matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Haunted Heist avatar" });
+        return;
+      } catch (err) {
+        if (err.name === "AbortError") return;
+      }
+    }
+    const a = el("a", { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   let toastTimer;
@@ -663,6 +738,11 @@
     });
     renderUI();
     render();
+    // Height of the pinned phone preview, so the tab bar can pin just below it.
+    const preview = document.querySelector(".preview");
+    new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--pin-h", preview.offsetHeight + "px");
+    }).observe(preview);
   }
   init();
 })();
