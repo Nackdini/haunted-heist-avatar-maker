@@ -157,6 +157,31 @@
   .slider .ticks { grid-column: 2; display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin-top: -10px; }
   .error { padding: 24px; color: var(--cream); line-height: 1.5; }
   .error code { background: #241c1c; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, monospace; font-weight: 400; }
+  /* Framing: bust / tall hat / full body. */
+  .framing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .framing button {
+    border: 2px solid var(--edge); background: #241c1c; border-radius: 100px; padding: 6px 8px; cursor: pointer;
+    color: var(--muted); font-size: 15px; white-space: nowrap;
+  }
+  .framing button:hover { background: var(--red-hover); color: var(--cream); }
+  .framing button[aria-pressed="true"] { background: var(--red); color: var(--cream); paint-order: stroke fill; -webkit-text-stroke: 3px #000; }
+  /* Characters in the picture (group photo). */
+  /* Padding leaves room for the active chip's ring (a box-shadow), which the
+     scrolling row would otherwise clip. */
+  .members { display: flex; gap: 12px; padding: 12px 14px 6px; align-items: center; overflow-x: auto; scrollbar-width: none; }
+  .members::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; width: 58px; height: 58px; border-radius: 50%; border: 2px solid var(--edge); background: #241c1c;
+    padding: 0; overflow: hidden; cursor: pointer; display: grid; place-items: center; font-size: 26px; color: var(--cream);
+  }
+  .chip canvas { width: 100%; height: 100%; display: block; }
+  .chip[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--red-active); }
+  .chip.add, .chip.remove { width: 44px; height: 44px; background: var(--red); paint-order: stroke fill; -webkit-text-stroke: 3px #000; }
+  .chip.remove { background: #241c1c; }
+  .grid.poses { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .grid.poses .tile { padding: 0; }
+  .grid.poses canvas { width: 100%; height: 100%; }
+
   /* ---------- Phones ---------- */
   button, select, label, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .short { display: none; }
@@ -185,6 +210,8 @@
     .grid { gap: 6px; }
     .grid.rooms { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
     .swatches { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 10px; }
+    .framing button { font-size: 13px; padding: 5px 6px; min-height: 34px; }
+    .grid.poses { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
     .slider { grid-template-columns: 76px 1fr; }
     .slider input { height: 32px; }
   }
@@ -244,6 +271,7 @@
         Download
       </button>
     </div>
+    <div class="framing" id="framing" role="group" aria-label="Framing"></div>
     <div class="options">
       <label><input type="checkbox" id="circle"> Circle<span class="long"> preview</span></label>
       <label><input type="checkbox" id="soft" checked> Soft<span class="long"> room</span></label>
@@ -260,6 +288,7 @@
   </section>
 
   <section class="editor" aria-label="Customize">
+    <div class="members" id="members" aria-label="Characters in the picture"></div>
     <div class="roles" id="roles"></div>
     <div class="tabs" id="tabs" role="tablist"></div>
     <div class="panel" id="panel"></div>
@@ -276,8 +305,15 @@
     { id: "hat", label: "Hat" },
     { id: "color", label: "Color" },
     { id: "body", label: "Body" },
+    { id: "pose", label: "Pose" },
     { id: "background", label: "Background" },
   ];
+  const FRAMINGS = [
+    { id: "bust", label: "Bust" },
+    { id: "tall", label: "Tall hat" },
+    { id: "full", label: "Full body" },
+  ];
+  const MAX_MEMBERS = 4;
   const BACKGROUNDS = [
     { id: "none", label: "None" },
     { id: "mansion", label: "Mansion", stops: ["#4a3560", "#16101e"] },
@@ -299,71 +335,65 @@
   let manifest = null;
   let rooms = []; // from layers/backgrounds/backgrounds.json (BenchTools/pfp_room_bake.tscn)
   let roomsBaked = 0;
-  let role = "heister";
   let tab = "outfit";
-  const state = {}; // role -> selections
+  // The picture: one or more characters ("members") in a shared scene.
+  const scene = { members: [], active: 0, bg: "mansion", framing: "bust" };
 
   // ---------- data helpers ----------
-  const prettify = (name, role) => name
-    .replace(new RegExp("^" + role + "_", "i"), "")
+  const prettify = (name, r) => name
+    .replace(new RegExp("^" + r + "_", "i"), "")
     .replace(/_(outfit|hat|face|static_face)$/i, "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
-  const R = () => manifest.roles[role];
-  const S = () => state[role];
-  const outfitOf = (s = S()) => R().outfits.find((o) => o.id === s.outfit) || R().outfits[0];
-  const hatOf = (s = S()) => R().hats.find((h) => h.id === s.hat) || null;
+  const S = () => scene.members[scene.active];
+  const roleOf = (m = S()) => manifest.roles[m.role];
+  const poseOf = (m = S()) => roleOf(m).poses[m.pose] || roleOf(m).poses.idle;
+  const outfitOf = (m = S()) => poseOf(m).outfits.find((o) => o.id === m.outfit) || poseOf(m).outfits[0];
+  const hatOf = (m = S()) => poseOf(m).hats.find((h) => h.id === m.hat) || null;
   const stepKey = (shape, weight) => `s${Math.round(shape * 100)}_w${Math.round(weight * 100)}`;
   const nearest = (steps, v) => steps.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a, steps[0]);
+  const colorHex = (m) => "#" + (roleOf(m).colors.find((c) => c.id === m.color) || roleOf(m).colors[0]).hex;
 
-  function defaults(r) {
-    const roleData = manifest.roles[r];
-    return {
-      outfit: roleData.default_outfit,
-      face: roleData.default_face,
-      hat: roleData.no_hat,
-      style: 0,
-      color: roleData.colors[0].id,
-      shape: 0,
-      weight: 0,
-      bg: rooms.length ? rooms[0].id : "mansion",
-    };
+  function newMember(r) {
+    const d = manifest.roles[r];
+    return { role: r, outfit: d.default_outfit, face: d.default_face, hat: d.no_hat, style: 0, color: d.colors[0].id, shape: 0, weight: 0, pose: "idle" };
   }
 
-  function clampToOutfit(s) {
-    const o = outfitOf(s);
-    s.shape = nearest(o.shape_steps, s.shape);
-    s.weight = nearest(o.weight_steps, s.weight);
-    const h = hatOf(s);
-    if (h && s.style >= h.styles.length) s.style = 0;
+  function clamp(m) {
+    const d = roleOf(m);
+    if (!d.poses[m.pose]) m.pose = "idle";
+    if (!poseOf(m).outfits.some((o) => o.id === m.outfit)) m.outfit = d.default_outfit;
+    const o = outfitOf(m);
+    m.shape = nearest(o.shape_steps, m.shape);
+    m.weight = nearest(o.weight_steps, m.weight);
+    const h = hatOf(m);
+    if (h && m.style >= h.styles.length) m.style = 0;
   }
 
-  // Layers to draw, bottom to top: [entry, tintHex|null, baseEntry|null]
-  function layerStack(s = S()) {
-    const r = R();
-    const o = outfitOf(s);
-    const v = o.variants[stepKey(s.shape, s.weight)] || Object.values(o.variants)[0];
+  // Parts of one character: { e (layer entry), tint (hex|null), front (bool) }.
+  function parts(m) {
+    const r = roleOf(m);
+    const o = outfitOf(m);
+    const v = o.variants[stepKey(m.shape, m.weight)] || Object.values(o.variants)[0];
     // Like PlayerAnimation.apply_character_color: a static-color outfit keeps its body,
     // but skin-colored head accessories still take the body color.
-    const color = "#" + (r.colors.find((c) => c.id === s.color) || r.colors[0]).hex;
-    const tint = o.static_color ? null : color;
-    const hat = o.allows_hats && s.hat !== r.no_hat ? hatOf(s) : null;
-    const hatBodies = hat ? (hat.styles[s.style] || hat.styles[0]).bodies : null;
-    const hatLayers = hatBodies ? (hatBodies[o.big_body ? "big" : "normal"] || hatBodies.normal || Object.values(hatBodies)[0]) : null;
+    const color = colorHex(m);
+    const hat = o.allows_hats && m.hat !== r.no_hat ? hatOf(m) : null;
+    const bodies = hat ? (hat.styles[m.style] || hat.styles[0]).bodies : null;
+    const hl = bodies ? (bodies[o.big_body ? "big" : "normal"] || bodies.normal || Object.values(bodies)[0]) : null;
     const faces = v.faces || {};
-    const faceKey = o.face_locked ? String(o.locked_face) : String(s.face);
-    const stack = [];
-    if (v.skin) stack.push([v.skin, tint, v.skin_base]);
-    // With a hat on, hoods/helmets swap out, even when that leaves no clothes at all.
-    const clothes = hat && o.hat_swaps_clothes ? v.clothes_hat : v.clothes;
-    if (clothes) stack.push([clothes, null]);
-    if (faces[faceKey]) stack.push([faces[faceKey], null]);
-    if (hatLayers && hatLayers.hat_skin) stack.push([hatLayers.hat_skin, hat.skin_tinted ? color : null, hatLayers.hat_skin_base]);
-    if (hatLayers && hatLayers.hat) stack.push([hatLayers.hat, null]);
-    return stack;
+    const face = faces[o.face_locked ? String(o.locked_face) : String(m.face)];
+    const list = [];
+    if (v.skin) list.push({ e: v.skin, tint: o.static_color ? null : color });
+    if (v.clothes) list.push({ e: v.clothes });
+    if (v.nohat && !hat) list.push({ e: v.nohat }); // hoods/helmets hide under a hat
+    if (face) list.push({ e: face, front: !!o.face_on_top });
+    if (hl && hl.hat_skin) list.push({ e: hl.hat_skin, tint: hat.skin_tinted ? color : null });
+    if (hl && hl.hat) list.push({ e: hl.hat });
+    return list;
   }
 
-  // ---------- image loading / tinting ----------
+  // ---------- images ----------
   const images = new Map();
   function loadImage(file) {
     if (!images.has(file)) {
@@ -378,62 +408,120 @@
     }
     return images.get(file);
   }
-  const tinted = new Map();
   const toLinear = new Float32Array(256).map((_, i) => {
     const c = i / 255;
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   });
-  const toSrgb = (l) => {
-    const c = l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
-    return Math.max(0, Math.min(255, Math.round(c * 255)));
-  };
-  // Skin is baked with white (img) and black (base) body color. The game's toon shader
-  // only tints where its color mask allows, so rebuild the color per pixel in linear
-  // light: base + (white - base) * color. Without a base layer, fall back to multiply.
-  function tint(img, base, hex) {
-    const key = img.src + hex;
-    if (tinted.has(key)) return tinted.get(key);
+  // Linear -> sRGB byte through a 4096-entry table (fast enough per pixel).
+  const SRGB_LUT = new Uint8ClampedArray(4097).map((_, i) => {
+    const l = i / 4096;
+    return Math.round((l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055) * 255);
+  });
+  const toSrgb = (l) => SRGB_LUT[l <= 0 ? 0 : l >= 1 ? 4096 : (l * 4096) | 0];
+  const hexLinear = (hex) => [1, 3, 5].map((i) => toLinear[parseInt(hex.slice(i, i + 2), 16)]);
+
+  function canvasOf(img) {
     const c = document.createElement("canvas");
-    c.width = img.naturalWidth; c.height = img.naturalHeight;
-    const g = c.getContext("2d", { willReadFrequently: true });
-    const rgb = [1, 3, 5].map((i) => toLinear[parseInt(hex.slice(i, i + 2), 16)]);
-    if (base) {
-      g.drawImage(base, 0, 0);
-      const b = g.getImageData(0, 0, c.width, c.height).data;
-      g.clearRect(0, 0, c.width, c.height);
-      g.drawImage(img, 0, 0);
-      const out = g.getImageData(0, 0, c.width, c.height);
-      const w = out.data;
-      for (let i = 0; i < w.length; i += 4) {
-        if (w[i + 3] === 0) continue;
-        for (let ch = 0; ch < 3; ch++) {
-          const lb = toLinear[b[i + ch]];
-          w[i + ch] = toSrgb(lb + (toLinear[w[i + ch]] - lb) * rgb[ch]);
-        }
-      }
-      g.putImageData(out, 0, 0);
-    } else {
-      g.drawImage(img, 0, 0);
-      g.globalCompositeOperation = "multiply";
-      g.fillStyle = hex;
-      g.fillRect(0, 0, c.width, c.height);
-      g.globalCompositeOperation = "destination-in";
-      g.drawImage(img, 0, 0);
-    }
-    tinted.set(key, c);
+    c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+    c.getContext("2d", { willReadFrequently: true }).drawImage(img, 0, 0);
     return c;
   }
+  // Tintable parts are baked at 50% grey (img) and black (base) body colour; the toon
+  // shader is linear in its colour, so any colour c is base + 2 * (grey - base) * c in
+  // linear light. That also respects the shader's colour mask.
+  const tintCache = new Map();
+  async function tinted(e, hex) {
+    const key = e.file + hex;
+    if (!tintCache.has(key)) {
+      tintCache.set(key, (async () => {
+        const [img, base] = await Promise.all([loadImage(e.file), e.base ? loadImage(e.base) : null]);
+        const c = canvasOf(img);
+        const g = c.getContext("2d", { willReadFrequently: true });
+        const out = g.getImageData(0, 0, c.width, c.height);
+        const w = out.data;
+        const b = base ? canvasOf(base).getContext("2d").getImageData(0, 0, c.width, c.height).data : null;
+        const rgb = hexLinear(hex);
+        for (let i = 0; i < w.length; i += 4) {
+          if (w[i + 3] === 0) continue;
+          for (let ch = 0; ch < 3; ch++) {
+            const lg = toLinear[w[i + ch]];
+            const lb = b ? toLinear[b[i + ch]] : 0;
+            w[i + ch] = toSrgb(lb + 2 * (lg - lb) * rgb[ch]);
+          }
+        }
+        g.putImageData(out, 0, 0);
+        return c;
+      })());
+    }
+    return tintCache.get(key);
+  }
+  // See-through tinted parts (goo): per-channel transmission tk + 2 * (tg - tk) * c, x255.
+  const glassCache = new Map();
+  async function glassMap(e, hex) {
+    const key = e.glass + hex;
+    if (!glassCache.has(key)) {
+      glassCache.set(key, (async () => {
+        const [tg, tk] = await Promise.all([loadImage(e.glass), loadImage(e.glass_base)]);
+        const c = canvasOf(tg);
+        const g = c.getContext("2d", { willReadFrequently: true });
+        const out = g.getImageData(0, 0, c.width, c.height);
+        const a = out.data;
+        const k = canvasOf(tk).getContext("2d").getImageData(0, 0, c.width, c.height).data;
+        const rgb = hexLinear(hex);
+        for (let i = 0; i < a.length; i += 4) {
+          for (let ch = 0; ch < 3; ch++) a[i + ch] = Math.max(0, Math.min(255, k[i + ch] + 2 * (a[i + ch] - k[i + ch]) * rgb[ch]));
+          a[i + 3] = 255;
+        }
+        g.putImageData(out, 0, 0);
+        return c;
+      })());
+    }
+    return glassCache.get(key);
+  }
 
-  const isBg = (id) => BACKGROUNDS.some((b) => b.id === id) || rooms.some((r) => r.id === id);
+  // ---------- scene layout ----------
+  // World units are metres with the floor at 0. Every role's bake has its own pixel
+  // scale (frame.px_per_m), so heisters and tricksters share one real-world scale.
+  const headHeight = (r) => (r.frame.feet_y - r.frame.head_y) / r.frame.px_per_m;
+  function sceneBox(members, framing) {
+    const head = Math.max(...members.map((m) => headHeight(roleOf(m))));
+    // Spacing leaves room for spread arms (flex, tpose); full body also keeps a margin under the feet.
+    const spacing = framing === "full" ? 1.0 : 0.8;
+    const groupWidth = (members.length - 1) * spacing + (framing === "full" ? 1.8 : 1.3);
+    let top, side;
+    if (framing === "full") { top = head + 1.25; side = top + 0.2; }
+    else if (framing === "tall") { top = head + 1.2; side = 1.75; }
+    else { top = head + 0.7; side = 1.24; }
+    // A wide group widens the square; spread the extra height evenly above and
+    // below so the characters stay centred instead of hugging the top.
+    const wide = Math.max(side, groupWidth);
+    top += (wide - side) / 2;
+    return { top, side: wide, spacing };
+  }
 
-  function paintBackground(g, size, bgId, roomImg) {
+  // ---------- compositing ----------
+  // Draws a source image into a w x h window of the output (smooth for colour, nearest
+  // for depth) and returns its pixels.
+  function scaledPixels(src, dx, dy, dw, dh, rx, ry, rw, rh, smooth) {
+    const c = document.createElement("canvas");
+    c.width = rw; c.height = rh;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.imageSmoothingEnabled = smooth;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(src, dx - rx, dy - ry, dw, dh);
+    return g.getImageData(0, 0, rw, rh).data;
+  }
+
+  async function paintBackground(g, size, bgId) {
     g.clearRect(0, 0, size, size);
-    if (roomImg) {
+    const room = rooms.find((r) => r.id === bgId);
+    if (room) {
+      const img = await loadImage(room.file);
       // Soft focus keeps the character readable against a busy room.
       const soft = $("soft").checked;
       if (soft) g.filter = `blur(${Math.round(size / 220)}px)`;
       const pad = soft ? size * 0.02 : 0;
-      g.drawImage(roomImg, -pad, -pad, size + pad * 2, size + pad * 2);
+      g.drawImage(img, -pad, -pad, size + pad * 2, size + pad * 2);
       g.filter = "none";
       const vignette = g.createRadialGradient(size / 2, size * 0.45, size * 0.25, size / 2, size * 0.5, size * 0.75);
       vignette.addColorStop(0, "rgba(0,0,0,0)");
@@ -451,18 +539,84 @@
     }
   }
 
-  async function composeTo(g, size, s = S()) {
-    const stack = layerStack(s);
-    const room = rooms.find((r) => r.id === s.bg);
-    const [roomImg, ...imgs] = await Promise.all([room ? loadImage(room.file) : null, ...stack.map(([e]) => loadImage(e.file))]);
-    const bases = await Promise.all(stack.map(([, hex, base]) => (hex && base ? loadImage(base.file) : null)));
-    const k = size / manifest.size;
-    paintBackground(g, size, s.bg, roomImg);
-    g.imageSmoothingQuality = "high";
-    stack.forEach(([e, hex], i) => {
-      const src = hex ? tint(imgs[i], bases[i], hex) : imgs[i];
-      g.drawImage(src, e.x * k, e.y * k, e.w * k, e.h * k);
-    });
+  // Stacks one character's parts per pixel by depth, straight onto the background
+  // (so see-through parts pass the real background through).
+  async function compositeMember(g, size, m, box, index, count) {
+    const r = roleOf(m);
+    const f = r.frame;
+    const pxPerM = size / box.side;
+    const k = pxPerM / f.px_per_m;
+    const cx = size / 2 + (index - (count - 1) / 2) * box.spacing * pxPerM;
+    const groundY = box.top * pxPerM;
+    const list = parts(m);
+    const loaded = await Promise.all(list.map(async (p) => ({
+      p,
+      color: p.tint ? await tinted(p.e, p.tint) : await loadImage(p.e.file),
+      depth: await loadImage(p.e.depth),
+      glass: p.tint && p.e.glass ? await glassMap(p.e, p.tint) : null,
+    })));
+    // Each part's window on the output.
+    const layers = [];
+    let bx0 = size, by0 = size, bx1 = 0, by1 = 0;
+    for (const L of loaded) {
+      const e = L.p.e;
+      const dx = cx + (e.x - f.head_x) * k, dy = groundY - (f.feet_y - e.y) * k;
+      const dw = e.w * k, dh = e.h * k;
+      const x0 = Math.max(0, Math.floor(dx)), y0 = Math.max(0, Math.floor(dy));
+      const x1 = Math.min(size, Math.ceil(dx + dw)), y1 = Math.min(size, Math.ceil(dy + dh));
+      if (x1 <= x0 || y1 <= y0) continue;
+      layers.push({ L, dx, dy, dw, dh, x0, y0, x1, y1 });
+      bx0 = Math.min(bx0, x0); by0 = Math.min(by0, y0); bx1 = Math.max(bx1, x1); by1 = Math.max(by1, y1);
+    }
+    if (!layers.length) return;
+    const W = bx1 - bx0, H = by1 - by0;
+    for (const l of layers) {
+      l.col = scaledPixels(l.L.color, l.dx, l.dy, l.dw, l.dh, bx0, by0, W, H, true);
+      l.z = scaledPixels(l.L.depth, l.dx, l.dy, l.dw, l.dh, bx0, by0, W, H, false);
+      l.t = l.L.glass ? scaledPixels(l.L.glass, l.dx, l.dy, l.dw, l.dh, bx0, by0, W, H, true) : null;
+      l.front = !!l.L.p.front;
+    }
+    const outImg = g.getImageData(bx0, by0, W, H);
+    const o = outImg.data;
+    const n = layers.length;
+    const order = new Int32Array(n), dep = new Float64Array(n);
+    for (let i = 0; i < o.length; i += 4) {
+      let cnt = 0;
+      for (let j = 0; j < n; j++) {
+        const L = layers[j];
+        if (L.col[i + 3] === 0) continue;
+        const d = L.z[i] * 256 + L.z[i + 1];
+        if (d === 0) continue;
+        dep[cnt] = L.front ? 0 : d; order[cnt++] = j;
+      }
+      if (cnt === 0) continue;
+      // Far to near (insertion sort; a handful of parts per pixel).
+      for (let a = 1; a < cnt; a++) {
+        const dj = dep[a], oj = order[a];
+        let b = a - 1;
+        while (b >= 0 && dep[b] < dj) { dep[b + 1] = dep[b]; order[b + 1] = order[b]; b--; }
+        dep[b + 1] = dj; order[b + 1] = oj;
+      }
+      let r0 = toLinear[o[i]], g0 = toLinear[o[i + 1]], b0 = toLinear[o[i + 2]];
+      for (let a = 0; a < cnt; a++) {
+        const L = layers[order[a]];
+        const al = L.col[i + 3] / 255;
+        const pr = toLinear[L.col[i]] * al, pg = toLinear[L.col[i + 1]] * al, pb = toLinear[L.col[i + 2]] * al;
+        if (L.t) {
+          r0 = pr + (L.t[i] / 255) * r0; g0 = pg + (L.t[i + 1] / 255) * g0; b0 = pb + (L.t[i + 2] / 255) * b0;
+        } else {
+          r0 = pr + (1 - al) * r0; g0 = pg + (1 - al) * g0; b0 = pb + (1 - al) * b0;
+        }
+      }
+      o[i] = toSrgb(r0); o[i + 1] = toSrgb(g0); o[i + 2] = toSrgb(b0); o[i + 3] = Math.max(o[i + 3], 255);
+    }
+    g.putImageData(outImg, bx0, by0);
+  }
+
+  async function composeScene(g, size, members = scene.members, framing = scene.framing, bg = scene.bg) {
+    await paintBackground(g, size, bg);
+    const box = sceneBox(members, framing);
+    for (let i = 0; i < members.length; i++) await compositeMember(g, size, members[i], box, i, members.length);
   }
 
   let drawToken = 0;
@@ -470,12 +624,12 @@
     const token = ++drawToken;
     const loading = setTimeout(() => $("loading").classList.add("on"), 150);
     const off = document.createElement("canvas");
-    off.width = off.height = manifest.size;
+    off.width = off.height = canvas.width;
     try {
-      await composeTo(off.getContext("2d"), manifest.size);
+      await composeScene(off.getContext("2d", { willReadFrequently: true }), canvas.width);
       if (token !== drawToken) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(off, 0, 0);
     } catch (err) {
       console.error(err);
       toast("Couldn't load part of this look.");
@@ -514,35 +668,87 @@
       const g = c.getContext("2d");
       const scale = Math.min(88 / img.naturalWidth, 88 / img.naturalHeight);
       const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
-      g.fillStyle = "#" + (R().colors.find((x) => x.id === S().color) || R().colors[0]).hex;
+      g.fillStyle = colorHex(S());
       g.beginPath(); g.arc(48, 48, 46, 0, Math.PI * 2); g.fill();
       g.drawImage(img, (96 - w) / 2, (96 - h) / 2, w, h);
     }).catch(() => {});
     return c;
   }
 
+  // Live mini-render of a character (pose tiles, character chips).
+  function memberThumb(m, size, framing) {
+    const c = el("canvas", { width: size, height: size });
+    const g = c.getContext("2d", { willReadFrequently: true });
+    composeScene(g, size, [m], framing, "none").catch(() => {});
+    return c;
+  }
+
   function set(patch) {
     Object.assign(S(), patch);
-    clampToOutfit(S());
+    clamp(S());
     renderUI();
     render();
+  }
+
+  function renderMembers() {
+    const box = $("members");
+    const chips = scene.members.map((m, i) => el("button", {
+      type: "button", class: "chip", "aria-pressed": String(i === scene.active), title: `Character ${i + 1}`,
+      "aria-label": `Edit character ${i + 1}`,
+      on: { click: () => { scene.active = i; renderUI(); } },
+    }, memberThumb(m, 64, "bust")));
+    if (scene.members.length < MAX_MEMBERS) {
+      chips.push(el("button", {
+        type: "button", class: "chip add", title: "Add a character", "aria-label": "Add a character",
+        on: { click: () => {
+          // New characters start as the default look of the current role, in the same pose.
+          const m = Object.assign(newMember(S().role), { pose: S().pose });
+          scene.members.push(m); scene.active = scene.members.length - 1; clamp(m);
+          renderUI(); render();
+        } },
+      }, "+"));
+    }
+    if (scene.members.length > 1) {
+      chips.push(el("button", {
+        type: "button", class: "chip remove", title: "Remove this character", "aria-label": "Remove this character",
+        on: { click: () => {
+          scene.members.splice(scene.active, 1);
+          scene.active = Math.min(scene.active, scene.members.length - 1);
+          renderUI(); render();
+        } },
+      }, "×"));
+    }
+    box.replaceChildren(...chips);
   }
 
   function renderRoles() {
     const box = $("roles");
     box.replaceChildren(...Object.keys(manifest.roles).map((r) =>
-      el("button", { type: "button", "aria-pressed": String(r === role), on: { click: () => { role = r; renderUI(); render(); } } }, ROLE_LABELS[r] || r)));
+      el("button", { type: "button", "aria-pressed": String(r === S().role), on: { click: () => {
+        if (r === S().role) return;
+        const pose = S().pose;
+        scene.members[scene.active] = Object.assign(newMember(r), { pose });
+        clamp(S()); renderUI(); render();
+      } } }, ROLE_LABELS[r] || r)));
+  }
+
+  function renderFraming() {
+    $("framing").replaceChildren(...FRAMINGS.map((fr) => el("button", {
+      type: "button", "aria-pressed": String(fr.id === scene.framing),
+      on: { click: () => { scene.framing = fr.id; renderFraming(); render(); } },
+    }, fr.label)));
   }
 
   function renderTabs() {
     const o = outfitOf();
-    const hat = o.allows_hats && S().hat !== R().no_hat ? hatOf() : null;
+    const hat = o.allows_hats && S().hat !== roleOf().no_hat ? hatOf() : null;
     const disabled = {
       face: o.face_locked,
       hat: !o.allows_hats,
       // Static-color outfits only recolor skin-colored head accessories.
       color: o.static_color && !(hat && hat.skin_tinted),
       body: o.shape_steps.length < 2 && o.weight_steps.length < 2,
+      pose: (roleOf().pose_order || []).length < 2,
     };
     if (disabled[tab]) tab = "outfit";
     $("tabs").replaceChildren(...TABS.map((t) => el("button", {
@@ -553,35 +759,35 @@
   }
 
   function renderPanel() {
-    const r = R(), s = S(), o = outfitOf();
+    const r = roleOf(), m = S(), o = outfitOf(), pose = poseOf();
     const panel = $("panel");
     const nodes = [];
     if (tab === "outfit") {
-      nodes.push(el("div", { class: "grid" }, r.outfits.map((x) => tile({
-        pressed: x.id === s.outfit, title: "Outfit",
+      nodes.push(el("div", { class: "grid" }, pose.outfits.map((x) => tile({
+        pressed: x.id === m.outfit, title: "Outfit",
         content: iconImg(x.icon, "Outfit"),
         onClick: () => set({ outfit: x.id }),
       }))));
     } else if (tab === "face") {
-      const v = o.variants[stepKey(s.shape, s.weight)];
+      const v = o.variants[stepKey(m.shape, m.weight)];
       nodes.push(el("div", { class: "grid" }, r.faces.filter((f) => v.faces && v.faces[f.id]).map((f) => tile({
-        pressed: f.id === s.face, title: prettify(f.name, role),
+        pressed: f.id === m.face, title: prettify(f.name, m.role),
         content: faceThumb(v.faces[f.id]),
         onClick: () => set({ face: f.id }),
       }))));
     } else if (tab === "hat") {
-      const tiles = [tile({ pressed: s.hat === r.no_hat, title: "No hat", content: el("span", { class: "none" }, "No hat"), onClick: () => set({ hat: r.no_hat, style: 0 }) })];
-      for (const h of r.hats) tiles.push(tile({
-        pressed: h.id === s.hat, title: prettify(h.name, role),
-        content: iconImg(h.icon || (h.styles[0] && h.styles[0].icon), prettify(h.name, role)),
+      const tiles = [tile({ pressed: m.hat === r.no_hat, title: "No hat", content: el("span", { class: "none" }, "No hat"), onClick: () => set({ hat: r.no_hat, style: 0 }) })];
+      for (const h of pose.hats) tiles.push(tile({
+        pressed: h.id === m.hat, title: prettify(h.name, m.role),
+        content: iconImg(h.icon || (h.styles[0] && h.styles[0].icon), prettify(h.name, m.role)),
         onClick: () => set({ hat: h.id, style: 0 }),
       }));
       nodes.push(el("div", { class: "grid" }, tiles));
       const h = hatOf();
-      if (h && h.styles.length > 1 && s.hat !== r.no_hat) {
+      if (h && h.styles.length > 1 && m.hat !== r.no_hat) {
         nodes.push(el("div", { class: "section-title" }, "Style"));
         nodes.push(el("div", { class: "grid" }, h.styles.map((st, i) => tile({
-          pressed: i === s.style, title: `Style ${i + 1}`,
+          pressed: i === m.style, title: `Style ${i + 1}`,
           content: iconImg(st.icon, `Style ${i + 1}`),
           onClick: () => set({ style: i }),
         }))));
@@ -589,39 +795,52 @@
     } else if (tab === "color") {
       nodes.push(el("div", { class: "swatches" }, r.colors.map((c) => el("button", {
         type: "button", class: "swatch", style: `background:#${c.hex}`, title: "#" + c.hex, "aria-label": "Color #" + c.hex,
-        "aria-pressed": String(c.id === s.color), on: { click: () => set({ color: c.id }) },
+        "aria-pressed": String(c.id === m.color), on: { click: () => set({ color: c.id }) },
       }))));
     } else if (tab === "body") {
       const slider = (label, key, steps) => {
         if (steps.length < 2) return null;
-        const input = el("input", { type: "range", min: 0, max: steps.length - 1, step: 1, value: steps.indexOf(s[key]), "aria-label": label });
+        const input = el("input", { type: "range", min: 0, max: steps.length - 1, step: 1, value: steps.indexOf(m[key]), "aria-label": label });
         input.addEventListener("input", () => { S()[key] = steps[+input.value]; render(); });
+        input.addEventListener("change", () => renderMembers());
         return el("div", { class: "slider" }, [el("span", {}, label), input,
           el("div", { class: "ticks" }, steps.map((v) => el("span", {}, v === 0 ? "Min" : v === 1 ? "Max" : "Mid")))]);
       };
       nodes.push(slider("Shape", "shape", o.shape_steps));
       nodes.push(slider("Weight", "weight", o.weight_steps));
+    } else if (tab === "pose") {
+      nodes.push(el("div", { class: "grid poses" }, (r.pose_order || ["idle"]).filter((p) => r.poses[p]).map((p) => {
+        const preview = Object.assign({}, m, { pose: p });
+        clamp(preview);
+        return tile({
+          pressed: p === m.pose, title: p === "idle" ? "Idle" : prettify(p, ""),
+          content: memberThumb(preview, 120, "full"),
+          onClick: () => set({ pose: p }),
+        });
+      })));
     } else if (tab === "background") {
       if (rooms.length) {
         nodes.push(el("div", { class: "section-title" }, "Rooms"));
         nodes.push(el("div", { class: "grid rooms" }, rooms.map((rm) => tile({
-          pressed: rm.id === s.bg, photo: true,
+          pressed: rm.id === scene.bg, photo: true,
           content: el("img", { src: LAYERS + rm.file + (roomsBaked ? "?v=" + roomsBaked : ""), alt: "Room", loading: "lazy" }),
-          onClick: () => set({ bg: rm.id }),
+          onClick: () => { scene.bg = rm.id; renderPanel(); render(); },
         }))));
         nodes.push(el("div", { class: "section-title" }, "Colors"));
       }
       nodes.push(el("div", { class: "swatches" }, BACKGROUNDS.map((b) => {
-        let style = "background:" + (b.color || (b.stops ? `radial-gradient(circle at 50% 40%, ${b.stops[0]}, ${b.stops[1]})` : "repeating-conic-gradient(#3a3145 0 25%, #262030 0 50%) 50% / 14px 14px"));
+        const style = "background:" + (b.color || (b.stops ? `radial-gradient(circle at 50% 40%, ${b.stops[0]}, ${b.stops[1]})` : "repeating-conic-gradient(#3a3145 0 25%, #262030 0 50%) 50% / 14px 14px"));
         return el("button", { type: "button", class: "swatch", style, title: b.label, "aria-label": b.label + " background",
-          "aria-pressed": String(b.id === s.bg), on: { click: () => set({ bg: b.id }) } });
+          "aria-pressed": String(b.id === scene.bg), on: { click: () => { scene.bg = b.id; renderPanel(); render(); } } });
       })));
     }
     panel.replaceChildren(...nodes.filter(Boolean));
   }
 
   function renderUI() {
+    renderMembers();
     renderRoles();
+    renderFraming();
     renderTabs();
     renderPanel();
   }
@@ -629,11 +848,13 @@
   // ---------- actions ----------
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   function randomize() {
-    const r = R();
-    const o = pick(r.outfits);
-    const hatRoll = Math.random() < 0.25 ? r.no_hat : pick(r.hats).id;
-    const h = r.hats.find((x) => x.id === hatRoll);
-    Object.assign(S(), {
+    const m = S();
+    const r = roleOf(m);
+    const pose = poseOf(m);
+    const o = pick(pose.outfits);
+    const hatRoll = Math.random() < 0.25 ? r.no_hat : pick(pose.hats).id;
+    const h = pose.hats.find((x) => x.id === hatRoll);
+    Object.assign(m, {
       outfit: o.id,
       face: pick(r.faces).id,
       hat: hatRoll,
@@ -641,27 +862,20 @@
       color: pick(r.colors).id,
       shape: pick(o.shape_steps),
       weight: pick(o.weight_steps),
-      // Mostly rooms; the flat colors still turn up. "None" (transparent) is never rolled.
-      bg: rooms.length && Math.random() < 0.8 ? pick(rooms).id : pick(BACKGROUNDS.filter((b) => b.id !== "none")).id,
     });
+    clamp(m);
+    // Mostly rooms; the flat colors still turn up. "None" (transparent) is never rolled.
+    scene.bg = rooms.length && Math.random() < 0.8 ? pick(rooms).id : pick(BACKGROUNDS.filter((b) => b.id !== "none")).id;
     renderUI();
     render();
   }
 
   async function download() {
     const size = +$("size").value;
-    const c = document.createElement("canvas");
-    c.width = c.height = manifest.size;
-    await composeTo(c.getContext("2d"), manifest.size);
-    let out = c;
-    if (size !== manifest.size) {
-      out = document.createElement("canvas");
-      out.width = out.height = size;
-      const g = out.getContext("2d");
-      g.imageSmoothingQuality = "high";
-      g.drawImage(c, 0, 0, size, size);
-    }
-    const name = `haunted-heist-${role}-${size}.png`;
+    const out = document.createElement("canvas");
+    out.width = out.height = size;
+    await composeScene(out.getContext("2d", { willReadFrequently: true }), size);
+    const name = `haunted-heist-${scene.members.length > 1 ? "group" : S().role}-${size}.png`;
     const blob = await new Promise((resolve) => out.toBlob(resolve, "image/png"));
     // Phones: the share sheet offers "Save Image" straight to Photos.
     const file = new File([blob], name, { type: "image/png" });
@@ -685,24 +899,39 @@
     toastTimer = setTimeout(() => { $("toast").textContent = ""; }, 2500);
   }
 
-  // #r=heister&o=0&f=3&h=4&st=0&c=2&sh=50&w=0&bg=mansion
+  // Link: #m=<member>~<member>&bg=<id>&fr=<framing>, member = role.o.f.h.st.c.sh.w.pose
+  // (older single-character links with r=&o=&... still open).
+  const POSE_KEY = (p) => p.replace(/ /g, "_");
   function writeHash() {
-    const s = S();
-    const p = new URLSearchParams({ r: role, o: s.outfit, f: s.face, h: s.hat, st: s.style, c: s.color, sh: Math.round(s.shape * 100), w: Math.round(s.weight * 100), bg: s.bg });
+    const enc = (m) => [m.role, m.outfit, m.face, m.hat, m.style, m.color, Math.round(m.shape * 100), Math.round(m.weight * 100), POSE_KEY(m.pose)].join(".");
+    const p = new URLSearchParams({ m: scene.members.map(enc).join("~"), bg: scene.bg, fr: scene.framing });
     history.replaceState(null, "", "#" + p.toString());
   }
   function readHash() {
     const p = new URLSearchParams(location.hash.slice(1));
-    if (!p.has("r") || !manifest.roles[p.get("r")]) return;
-    role = p.get("r");
-    const n = (k, d) => (p.has(k) && !isNaN(+p.get(k)) ? +p.get(k) : d);
-    const s = S();
-    Object.assign(s, {
-      outfit: n("o", s.outfit), face: n("f", s.face), hat: n("h", s.hat), style: n("st", 0), color: n("c", s.color),
-      shape: n("sh", 0) / 100, weight: n("w", 0) / 100, bg: isBg(p.get("bg")) ? p.get("bg") : s.bg,
-    });
-    if (!R().outfits.some((o) => o.id === s.outfit)) s.outfit = R().default_outfit;
-    clampToOutfit(s);
+    const isBg = (id) => BACKGROUNDS.some((b) => b.id === id) || rooms.some((r) => r.id === id);
+    if (isBg(p.get("bg"))) scene.bg = p.get("bg");
+    if (FRAMINGS.some((f) => f.id === p.get("fr"))) scene.framing = p.get("fr");
+    const members = [];
+    if (p.has("m")) {
+      for (const part of p.get("m").split("~").slice(0, MAX_MEMBERS)) {
+        const [r, ...rest] = part.split(".");
+        if (!manifest.roles[r]) continue;
+        const nums = rest.slice(0, 8).map(Number);
+        const m = newMember(r);
+        const keys = ["outfit", "face", "hat", "style", "color", "shape", "weight"];
+        keys.forEach((k, i) => { if (!isNaN(nums[i])) m[k] = (k === "shape" || k === "weight") ? nums[i] / 100 : nums[i]; });
+        const pose = (rest[7] || "idle").replace(/_/g, " ");
+        if (manifest.roles[r].poses[pose]) m.pose = pose;
+        clamp(m); members.push(m);
+      }
+    } else if (p.has("r") && manifest.roles[p.get("r")]) {
+      const m = newMember(p.get("r"));
+      const n = (k, d) => (p.has(k) && !isNaN(+p.get(k)) ? +p.get(k) : d);
+      Object.assign(m, { outfit: n("o", m.outfit), face: n("f", m.face), hat: n("h", m.hat), style: n("st", 0), color: n("c", m.color), shape: n("sh", 0) / 100, weight: n("w", 0) / 100 });
+      clamp(m); members.push(m);
+    }
+    if (members.length) { scene.members = members; scene.active = 0; }
   }
 
   async function init() {
@@ -726,7 +955,8 @@
         roomsBaked = data.baked || 0;
       }
     } catch { /* room shots are optional */ }
-    for (const r of Object.keys(manifest.roles)) state[r] = defaults(r);
+    scene.members = [newMember(Object.keys(manifest.roles)[0])];
+    if (rooms.length) scene.bg = rooms[0].id;
     readHash();
     $("randomize").addEventListener("click", randomize);
     $("download").addEventListener("click", download);
